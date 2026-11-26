@@ -16,6 +16,7 @@ from google.genai import types
 
 from .models import Conversation, Message
 from .services import GeminiNotConfiguredError, LANGUAGES, generate_answer
+from hospital.knowledge import retrieve_hospital_context
 
 
 logger = logging.getLogger(__name__)
@@ -152,9 +153,20 @@ def chat(request):
         for stored_message in previous_messages
     ]
     contents.append(types.Content(role='user', parts=current_parts))
+    hospital_context, hospital_sources = retrieve_hospital_context(
+        ' '.join(
+            [stored_message.text for stored_message in previous_messages]
+            + [user_text]
+        )
+    )
 
     try:
-        answer = generate_answer(language, simplified_mode, contents)
+        answer = generate_answer(
+            language,
+            simplified_mode,
+            contents,
+            trusted_context=hospital_context,
+        )
     except GeminiNotConfiguredError as error:
         return Response(
             {'detail': str(error)},
@@ -198,5 +210,6 @@ def chat(request):
         'answer': answer,
         'source': 'Gemini · PULSELINE',
         'conversation_id': str(conversation.id),
-        'sources': [],
+        'sources': hospital_sources,
+        'language': language,
     })

@@ -26,6 +26,13 @@ NOTICE_LANGUAGES = {
     'Nepali': 'Nepali',
     'Tamil': 'Tamil',
     'Telugu': 'Telugu',
+    'Marathi': 'Marathi',
+    'Gujarati': 'Gujarati',
+    'Kannada': 'Kannada',
+    'Malayalam': 'Malayalam',
+    'Punjabi': 'Punjabi',
+    'Assamese': 'Assamese',
+    'Urdu': 'Urdu',
 }
 DEPARTMENT_LANGUAGES = {
     'English': 'en-IN',
@@ -34,7 +41,14 @@ DEPARTMENT_LANGUAGES = {
     'Odia': 'or-IN',
     'Tamil': 'ta-IN',
     'Telugu': 'te-IN',
-    'Nepali': 'ne',
+    'Nepali': 'ne-NP',
+    'Marathi': 'mr-IN',
+    'Gujarati': 'gu-IN',
+    'Kannada': 'kn-IN',
+    'Malayalam': 'ml-IN',
+    'Punjabi': 'pa-IN',
+    'Assamese': 'as-IN',
+    'Urdu': 'ur-IN',
 }
 
 

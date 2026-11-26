@@ -4,7 +4,9 @@ from django.test import override_settings
 from django.urls import reverse
 from rest_framework.test import APITestCase
 
-from .models import Department, Feedback, HospitalProfile, Notice
+from .knowledge import retrieve_hospital_context
+from .models import Department, Facility, Feedback, HospitalProfile, Notice, Specialist
+from .views import DEPARTMENT_LANGUAGES, NOTICE_LANGUAGES
 
 
 @override_settings(ALLOWED_HOSTS=['testserver'], GEMINI_API_KEY='test-key')
@@ -55,6 +57,54 @@ class HospitalApiTests(APITestCase):
         response = self.client.get(reverse('hospital-notices'))
 
         self.assertEqual([notice['title'] for notice in response.data], ['Public'])
+
+    def test_ai_context_uses_only_verified_directory_and_published_notices(self):
+        HospitalProfile.objects.create(
+            name='Example Hospital',
+            address='12 Main Street',
+            phone='555-0100',
+        )
+        self.department.is_verified = True
+        self.department.hours = 'Open weekdays'
+        self.department.save()
+        Department.objects.create(
+            name='Unverified Service',
+            category='Medicine',
+            description='Not approved for public answers.',
+        )
+        Facility.objects.create(
+            name='Imaging Center',
+            description='Radiology imaging',
+            is_verified=True,
+        )
+        Specialist.objects.create(
+            department=self.department,
+            name='Dr Example',
+            qualification='MD',
+            languages=['Bengali', 'English'],
+            is_verified=True,
+        )
+        Notice.objects.create(
+            title='Clinic Hours',
+            body='The clinic opens at 9 AM.',
+            is_published=True,
+        )
+        Notice.objects.create(
+            title='Private Draft',
+            body='This draft must not be sent to AI.',
+            owner_token='other',
+        )
+
+        context, sources = retrieve_hospital_context('Cardiology clinic hours')
+
+        self.assertIn('12 Main Street', context)
+        self.assertIn('Cardiology', context)
+        self.assertIn('Dr Example', context)
+        self.assertIn('Clinic Hours', context)
+        self.assertNotIn('Unverified Service', context)
+        self.assertNotIn('Private Draft', context)
+        self.assertIn('Department: Cardiology', sources)
+        self.assertIn('Official notice: Clinic Hours', sources)
 
     def test_feedback_is_validated_and_persisted(self):
         response = self.client.post(
@@ -107,4 +157,18 @@ class HospitalApiTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['result'], 'Short notice.')
         self.assertEqual(generate.call_count, 1)
+
+    @patch('hospital.views.generate_answer', return_value='Translated notice.')
+    def test_notice_translation_supports_all_assistant_languages(self, generate):
+        for language, code in DEPARTMENT_LANGUAGES.items():
+            with self.subTest(language=language):
+                response = self.client.post(
+                    reverse('notice-translate'),
+                    {'text': 'Clinic opens at 9 AM.', 'language': language},
+                    format='json',
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(generate.call_args.kwargs['language'], code)
+
+        self.assertEqual(generate.call_count, len(NOTICE_LANGUAGES))
 

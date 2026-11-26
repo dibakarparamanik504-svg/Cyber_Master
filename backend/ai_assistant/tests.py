@@ -6,7 +6,7 @@ from rest_framework.test import APITestCase
 from google.genai.errors import APIError
 
 from .models import Conversation
-from .services import generate_answer
+from .services import LANGUAGES, generate_answer
 
 
 @override_settings(ALLOWED_HOSTS=['testserver'], GEMINI_API_KEY='test-key')
@@ -19,17 +19,32 @@ class AIAssistantApiTests(APITestCase):
             'simplified_mode': 'false',
         }
 
+    @patch(
+        'ai_assistant.views.retrieve_hospital_context',
+        return_value=('Hospital: Example Hospital', ['Hospital profile']),
+    )
     @patch('ai_assistant.views.generate_answer', return_value='Bring your ID.')
-    def test_chat_returns_answer_and_persists_session_context(self, generate):
+    def test_chat_returns_answer_and_hospital_sources(
+        self,
+        generate,
+        retrieve_context,
+    ):
         response = self.client.post(self.url, self.payload, format='multipart')
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data['answer'], 'Bring your ID.')
         self.assertEqual(response.data['source'], 'Gemini · PULSELINE')
+        self.assertEqual(response.data['sources'], ['Hospital profile'])
+        self.assertEqual(response.data['language'], 'en-IN')
         self.assertIn('conversation_id', response.data)
         self.assertEqual(Conversation.objects.count(), 1)
         self.assertEqual(Conversation.objects.get().messages.count(), 2)
         self.assertEqual(generate.call_args.args[0:2], ('en-IN', False))
+        self.assertEqual(
+            generate.call_args.kwargs['trusted_context'],
+            'Hospital: Example Hospital',
+        )
+        retrieve_context.assert_called_once()
 
     @patch('ai_assistant.views.generate_answer', return_value='ଆପଣଙ୍କ ପରିଚୟପତ୍ର ଆଣନ୍ତୁ।')
     def test_selected_language_and_simple_mode_reach_gemini(self, generate):
@@ -46,7 +61,7 @@ class AIAssistantApiTests(APITestCase):
 
     @patch('ai_assistant.views.generate_answer', return_value='Hello.')
     def test_all_languages_offered_by_the_ui_are_accepted(self, generate):
-        for language in ('en-IN', 'bn-IN', 'hi-IN', 'or-IN', 'ta-IN', 'te-IN'):
+        for language in LANGUAGES:
             with self.subTest(language=language):
                 response = self.client.post(
                     self.url,
@@ -54,8 +69,9 @@ class AIAssistantApiTests(APITestCase):
                     format='multipart',
                 )
                 self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.data['language'], language)
 
-        self.assertEqual(generate.call_count, 6)
+        self.assertEqual(generate.call_count, len(LANGUAGES))
 
     def test_unsupported_language_is_rejected(self):
         payload = {**self.payload, 'language': 'xx-XX'}
