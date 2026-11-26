@@ -1,5 +1,6 @@
 
 import React, { useEffect, useState } from "react";
+import supportedLanguages from "../languages";
 import "./home.css";
 
 const API_BASE_URL = (process.env.REACT_APP_API_URL || "/api").replace(/\/$/, "");
@@ -664,11 +665,9 @@ function Home() {
                 value={language}
                 onChange={(e) => setLanguage(e.target.value)}
               >
-                <option value="Bengali">Bengali</option>
-                <option value="English">English</option>
-                <option value="Hindi">Hindi</option>
-                <option value="Odia">Odia</option>
-                <option value="Nepali">Nepali</option>
+                {supportedLanguages.map(({ name }) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
               </select>
 
               <div className="notice-actions">

@@ -1,5 +1,6 @@
 
 import React, { useEffect, useMemo, useState } from "react";
+import supportedLanguages from "../languages";
 import "./depertment.css";
 
 const API_BASE_URL = (process.env.REACT_APP_API_URL || "/api").replace(/\/$/, "");
@@ -486,12 +487,9 @@ function Departments() {
                 onChange={(event) => setLanguage(event.target.value)}
                 aria-label="Select language"
               >
-                <option>English</option>
-                <option>Bengali</option>
-                <option>Hindi</option>
-                <option>Odia</option>
-                <option>Tamil</option>
-                <option>Telugu</option>
+                {supportedLanguages.map(({ name }) => (
+                  <option key={name}>{name}</option>
+                ))}
               </select>
 
               <button

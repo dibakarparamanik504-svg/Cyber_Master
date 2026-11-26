@@ -1,17 +1,10 @@
 
 import React, { useEffect, useRef, useState } from "react";
+import supportedLanguages from "../languages";
 import "./AI_assistance.css";
 
 const API_URL = (process.env.REACT_APP_API_URL || "/api").replace(/\/$/, "");
-
-const languages = [
-  { code: "en-IN", name: "English", native: "English" },
-  { code: "bn-IN", name: "Bengali", native: "বাংলা" },
-  { code: "hi-IN", name: "Hindi", native: "हिन्दी" },
-  { code: "or-IN", name: "Odia", native: "ଓଡ଼ିଆ" },
-  { code: "ta-IN", name: "Tamil", native: "தமிழ்" },
-  { code: "te-IN", name: "Telugu", native: "తెలుగు" },
-];
+const languages = supportedLanguages;
 
 const initialMessages = [
   {
@@ -23,10 +16,34 @@ const initialMessages = [
   },
 ];
 
+const welcomeMessages = {
+  "en-IN": "Hello! I am PULSELINE. How can I help you today?",
+  "bn-IN": "নমস্কার! আমি PULSELINE। আজ আপনাকে কীভাবে সাহায্য করতে পারি?",
+  "hi-IN": "नमस्ते! मैं PULSELINE हूँ। आज मैं आपकी कैसे सहायता कर सकता हूँ?",
+  "or-IN": "ନମସ୍କାର! ମୁଁ PULSELINE। ଆଜି ଆପଣଙ୍କୁ କିପରି ସାହାଯ୍ୟ କରିପାରିବି?",
+  "ta-IN": "வணக்கம்! நான் PULSELINE. இன்று உங்களுக்கு எப்படி உதவலாம்?",
+  "te-IN": "నమస్కారం! నేను PULSELINE. ఈరోజు మీకు ఎలా సహాయపడగలను?",
+  "ne-NP": "नमस्कार! म PULSELINE हुँ। आज तपाईंलाई कसरी मद्दत गर्न सक्छु?",
+  "mr-IN": "नमस्कार! मी PULSELINE आहे. आज मी तुम्हाला कशी मदत करू?",
+  "gu-IN": "નમસ્તે! હું PULSELINE છું. આજે હું તમને કેવી રીતે મદદ કરી શકું?",
+  "kn-IN": "ನಮಸ್ಕಾರ! ನಾನು PULSELINE. ಇಂದು ನಿಮಗೆ ಹೇಗೆ ಸಹಾಯ ಮಾಡಲಿ?",
+  "ml-IN": "നമസ്കാരം! ഞാൻ PULSELINE. ഇന്ന് നിങ്ങളെ എങ്ങനെ സഹായിക്കാം?",
+  "pa-IN": "ਸਤ ਸ੍ਰੀ ਅਕਾਲ! ਮੈਂ PULSELINE ਹਾਂ। ਅੱਜ ਮੈਂ ਤੁਹਾਡੀ ਕਿਵੇਂ ਮਦਦ ਕਰ ਸਕਦਾ ਹਾਂ?",
+  "as-IN": "নমস্কাৰ! মই PULSELINE। আজি আপোনাক কেনেকৈ সহায় কৰিব পাৰোঁ?",
+  "ur-IN": "السلام علیکم! میں PULSELINE ہوں۔ آج میں آپ کی کیا مدد کر سکتا ہوں؟",
+};
+
+function createWelcomeMessages(language) {
+  return [{
+    ...initialMessages[0],
+    text: welcomeMessages[language] || welcomeMessages["en-IN"],
+  }];
+}
+
 function AIAssistant() {
-  const [messages, setMessages] = useState(initialMessages);
-  const [message, setMessage] = useState("");
   const [language, setLanguage] = useState("en-IN");
+  const [messages, setMessages] = useState(() => createWelcomeMessages("en-IN"));
+  const [message, setMessage] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [listening, setListening] = useState(false);
@@ -44,6 +61,18 @@ function AIAssistant() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  useEffect(() => {
+    setMessages((currentMessages) => {
+      if (
+        currentMessages.length === 1 &&
+        currentMessages[0].id === initialMessages[0].id
+      ) {
+        return createWelcomeMessages(language);
+      }
+      return currentMessages;
+    });
+  }, [language]);
 
   useEffect(() => {
     return () => {
@@ -272,7 +301,7 @@ function AIAssistant() {
 
   const clearConversation = () => {
     window.speechSynthesis?.cancel();
-    setMessages(initialMessages);
+    setMessages(createWelcomeMessages(language));
     setConversationId(null);
     setError("");
     setSelectedFile(null);
@@ -402,56 +431,61 @@ function AIAssistant() {
               </div>
 
               <div className="ai-message-area">
-                {messages.map((item) => (
-                  <div
-                    key={item.id}
-                    className={`ai-message-row ${item.role}`}
-                  >
-                    {item.role === "assistant" && (
-                      <div className="ai-message-avatar">✚</div>
-                    )}
-
-                    <div className="ai-message-content">
-                      <div className="ai-message-bubble">
-                        {item.text}
-                      </div>
-
-                      {item.fileName && (
-                        <small className="ai-file-caption">
-                          📎 {item.fileName}
-                        </small>
-                      )}
-
-                      {item.references?.length > 0 && (
-                        <div className="ai-source-list">
-                          <strong>Information sources</strong>
-                          {item.references.map((source, index) => (
-                            <div key={index}>
-                              {typeof source === "string"
-                                ? source
-                                : source.title || source.name || "Source"}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-
+                {showHistory ? (
+                  messages.map((item) => (
+                    <div
+                      key={item.id}
+                      className={`ai-message-row ${item.role}`}
+                    >
                       {item.role === "assistant" && (
-                        <button
-                          type="button"
-                          className="ai-speak-button"
-                          onClick={() => speakMessage(item.text)}
-                        >
-                          🔊 Listen
-                        </button>
+                        <div className="ai-message-avatar">✚</div>
                       )}
 
-                      <small className="ai-message-time">
-                        {item.time}
-                        {item.source ? ` · ${item.source}` : ""}
-                      </small>
+                      <div className="ai-message-content">
+                        <div className="ai-message-bubble">{item.text}</div>
+
+                        {item.fileName && (
+                          <small className="ai-file-caption">
+                            📎 {item.fileName}
+                          </small>
+                        )}
+
+                        {item.references?.length > 0 && (
+                          <div className="ai-source-list">
+                            <strong>Hospital records available</strong>
+                            {item.references.map((source, index) => (
+                              <div key={index}>
+                                {typeof source === "string"
+                                  ? source
+                                  : source.title || source.name || "Source"}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {item.role === "assistant" && (
+                          <button
+                            type="button"
+                            className="ai-speak-button"
+                            disabled={!voiceEnabled}
+                            onClick={() => speakMessage(item.text)}
+                          >
+                            🔊 Listen
+                          </button>
+                        )}
+
+                        <small className="ai-message-time">
+                          {item.time}
+                          {item.source ? ` · ${item.source}` : ""}
+                        </small>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <p className="ai-language-note" role="status">
+                    Conversation messages are hidden. Turn history back on to view them.
+                  </p>
+                )}
 
                 {loading && (
                   <div className="ai-message-row assistant">
@@ -684,8 +718,8 @@ function AIAssistant() {
             ))}
           </div>
           <p className="ai-language-note">
-            AI text replies support English, Bengali, Hindi, Odia,
-            Tamil, and Telugu. Voice recognition depends on browser support.
+            AI text replies support all {languages.length} listed languages.
+            Voice recognition and speech playback depend on browser support.
           </p>
         </section>
 
@@ -757,9 +791,9 @@ function AIAssistant() {
             ))}
           </div>
           <p className="ai-language-note">
-            File upload in this interface accepts JPG, PNG, WEBP,
-            PDF and TXT files up to 10 MB. Actual OCR and document
-            analysis require backend implementation.
+            File upload accepts JPG, PNG, WEBP, PDF and TXT files up to 10 MB.
+            Gemini analyzes supported images and documents; this is not a
+            dedicated clinical OCR or records system.
           </p>
         </section>
 
@@ -767,10 +801,10 @@ function AIAssistant() {
         <section className="ai-section ai-section-soft">
           <div className="ai-section-heading">
             <span className="ai-eyebrow">07 — HOSPITAL KNOWLEDGE RAG</span>
-            <h2>Verified Hospital Knowledge Assistant</h2>
+            <h2>Hospital-Context Assistant</h2>
             <p>
-              Ground AI responses in approved hospital documents
-              instead of relying on unsupported assumptions.
+            When staff-approved hospital records are available, the backend
+            supplies relevant details and returns the record titles.
             </p>
           </div>
 
@@ -780,7 +814,7 @@ function AIAssistant() {
               ["✓", "Verified Information Sources", "Use reviewed and maintained information."],
               ["▤", "Document-Based Question Answering", "Answer questions using retrieved documents."],
               ["⌗", "Source Citation", "Show references returned by the backend."],
-              ["↻", "Knowledge Update Synchronization", "Refresh indexed information when documents change."],
+              ["↻", "Live Record Retrieval", "Read current verified records and published notices for each request."],
               ["!", "Unknown-Answer Detection", "Avoid presenting unsupported information as fact."],
             ].map(([icon, title, description]) => (
               <div className="ai-feature-card" key={title}>
@@ -856,12 +890,7 @@ function AIAssistant() {
                 <input
                   type="checkbox"
                   checked={showHistory}
-                  onChange={(event) => {
-                    setShowHistory(event.target.checked);
-                    if (!event.target.checked) {
-                      clearConversation();
-                    }
-                  }}
+                  onChange={(event) => setShowHistory(event.target.checked)}
                 />
                 <span></span>
               </label>
