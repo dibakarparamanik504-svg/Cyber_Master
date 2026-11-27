@@ -106,6 +106,9 @@ class HospitalApiTests(APITestCase):
         self.assertIn('Department: Cardiology', sources)
         self.assertIn('Official notice: Clinic Hours', sources)
 
+        _, localized_sources = retrieve_hospital_context('হৃদরোগ বিভাগের সময়')
+        self.assertIn('Department: Cardiology', localized_sources)
+
     def test_feedback_is_validated_and_persisted(self):
         response = self.client.post(
             reverse('hospital-feedback'),

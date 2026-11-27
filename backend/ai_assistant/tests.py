@@ -1,12 +1,13 @@
 from unittest.mock import patch
 
+from django.contrib.auth import get_user_model
 from django.test import override_settings
 from django.urls import reverse
-from rest_framework.test import APITestCase
+from rest_framework.test import APIClient, APITestCase
 from google.genai.errors import APIError
 
 from .models import Conversation
-from .services import LANGUAGES, generate_answer
+from .services import LANGUAGES, build_system_instruction, generate_answer
 
 
 @override_settings(ALLOWED_HOSTS=['testserver'], GEMINI_API_KEY='test-key')
@@ -18,6 +19,39 @@ class AIAssistantApiTests(APITestCase):
             'language': 'en-IN',
             'simplified_mode': 'false',
         }
+
+    @patch('ai_assistant.views.retrieve_hospital_context', return_value=('', []))
+    @patch('ai_assistant.views.generate_answer', return_value='Hello.')
+    def test_signed_in_chat_requires_and_accepts_csrf_token(
+        self,
+        generate,
+        retrieve_context,
+    ):
+        user_model = get_user_model()
+        user = user_model.objects.create_user(
+            username='chat-user',
+            password='T7!a-secure-and-unique-passphrase',
+        )
+        client = APIClient(enforce_csrf_checks=True)
+        client.force_login(user)
+
+        csrf = client.get(reverse('auth-csrf'))
+        self.assertEqual(csrf.status_code, 200)
+
+        rejected = client.post(self.url, self.payload, format='multipart')
+        self.assertEqual(rejected.status_code, 403)
+
+        response = client.post(
+            self.url,
+            self.payload,
+            format='multipart',
+            HTTP_X_CSRFTOKEN=csrf.data['csrfToken'],
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['answer'], 'Hello.')
+        generate.assert_called_once()
+        retrieve_context.assert_called_once()
 
     @patch(
         'ai_assistant.views.retrieve_hospital_context',
@@ -81,6 +115,15 @@ class AIAssistantApiTests(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn('language', response.data)
 
+    def test_selected_language_is_explicit_in_model_instructions(self):
+        for language, name in LANGUAGES.items():
+            with self.subTest(language=language):
+                instruction = build_system_instruction(language, False)
+                self.assertIn(
+                    f'Reply in {name} using its normal writing system.',
+                    instruction,
+                )
+
     def test_conversation_cannot_be_accessed_from_another_session(self):
         with patch('ai_assistant.views.generate_answer', return_value='Response'):
             first_response = self.client.post(
@@ -97,6 +140,51 @@ class AIAssistantApiTests(APITestCase):
         response = another_client.post(self.url, payload, format='multipart')
 
         self.assertEqual(response.status_code, 404)
+
+    @patch(
+        'ai_assistant.views.retrieve_hospital_context',
+        return_value=('Hospital: Example Hospital', ['Hospital profile']),
+    )
+    @patch('ai_assistant.views.generate_answer', return_value='Bring your ID.')
+    def test_session_owner_can_restore_conversation_history(
+        self,
+        generate,
+        retrieve_context,
+    ):
+        response = self.client.post(self.url, self.payload, format='multipart')
+
+        history = self.client.get(
+            reverse(
+                'ai-assistant-history',
+                args=[response.data['conversation_id']],
+            )
+        )
+
+        self.assertEqual(history.status_code, 200)
+        self.assertEqual(
+            [message['role'] for message in history.data['messages']],
+            ['user', 'assistant'],
+        )
+        self.assertEqual(history.data['messages'][1]['text'], 'Bring your ID.')
+        self.assertEqual(
+            history.data['messages'][1]['sources'],
+            ['Hospital profile'],
+        )
+        self.assertEqual(history.data['messages'][1]['language'], 'en-IN')
+
+    @patch('ai_assistant.views.generate_answer', return_value='Private response.')
+    def test_conversation_history_is_not_visible_to_other_sessions(self, generate):
+        response = self.client.post(self.url, self.payload, format='multipart')
+        another_client = self.client_class()
+
+        history = another_client.get(
+            reverse(
+                'ai-assistant-history',
+                args=[response.data['conversation_id']],
+            )
+        )
+
+        self.assertEqual(history.status_code, 404)
 
     @patch('ai_assistant.views.generate_answer', return_value='First answer.')
     def test_follow_up_receives_recent_conversation_context(self, generate):
@@ -135,6 +223,16 @@ class AIAssistantApiTests(APITestCase):
 
         self.assertEqual(response.status_code, 503)
         self.assertIn('try again shortly', response.data['detail'])
+
+    @patch(
+        'ai_assistant.views.generate_answer',
+        side_effect=APIError(429, {'error': {'message': 'quota exhausted'}}),
+    )
+    def test_quota_limit_returns_actionable_message(self, generate):
+        response = self.client.post(self.url, self.payload, format='multipart')
+
+        self.assertEqual(response.status_code, 503)
+        self.assertIn('Google AI Studio quota', response.data['detail'])
 
     def test_unsupported_attachment_type_is_rejected(self):
         from django.core.files.uploadedfile import SimpleUploadedFile
@@ -177,8 +275,8 @@ class AIAssistantApiTests(APITestCase):
 
 @override_settings(
     GEMINI_API_KEY='test-key',
-    GEMINI_MODEL='gemini-3.8-flash',
-    GEMINI_FALLBACK_MODEL='gemini-3.5-flash-lite',
+    GEMINI_MODEL='gemini-3.5-flash-lite',
+    GEMINI_FALLBACK_MODEL='gemini-3.8-flash',
 )
 class GeminiFallbackTests(APITestCase):
     @patch('ai_assistant.services.genai.Client')
@@ -197,6 +295,6 @@ class GeminiFallbackTests(APITestCase):
                 call.kwargs['model']
                 for call in client.models.generate_content.call_args_list
             ],
-            ['gemini-3.8-flash', 'gemini-3.5-flash-lite'],
+            ['gemini-3.5-flash-lite', 'gemini-3.8-flash'],
         )
         client.close.assert_called_once_with()

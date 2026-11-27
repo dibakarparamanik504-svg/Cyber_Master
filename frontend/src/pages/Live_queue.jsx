@@ -247,36 +247,6 @@ function LiveQueue() {
         accessibleMode ? "queue-accessible-mode" : ""
       }`}
     >
-      {/* NAVIGATION */}
-      <header className="queue-navbar">
-        <a href="/" className="queue-brand">
-          <span className="queue-brand-icon">✚</span>
-          <span>
-            <strong>PULSELINE <b>AI</b></strong>
-            <small>INTELLIGENT HEALTHCARE</small>
-          </span>
-        </a>
-
-        <nav className="queue-nav-links">
-          <a href="/">HOME</a>
-          <a href="/appointment">APPOINTMENT</a>
-          <a href="/ai-assistant">AI ASSISTANT</a>
-          <a href="/live-queue" className="queue-nav-active">
-            LIVE QUEUE
-          </a>
-          <a href="/departments">DEPARTMENTS</a>
-        </nav>
-
-        <div className="queue-connection">
-          <span
-            className={`queue-connection-dot ${connectionStatus}`}
-          ></span>
-          {connectionStatus === "connected"
-            ? "CONNECTED"
-            : "NOT CONNECTED"}
-        </div>
-      </header>
-
       <main>
         {/* 01 HERO */}
         <section className="queue-hero">

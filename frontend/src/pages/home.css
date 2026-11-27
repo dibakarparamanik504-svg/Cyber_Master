@@ -361,6 +361,26 @@ body {
   line-height: 1.7;
 }
 
+.feature-card-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: #0eaa9b;
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.feature-card-action:hover {
+  color: #087c71;
+}
+
+.feature-card-action:focus-visible {
+  outline: 3px solid #89d8cf;
+  outline-offset: 3px;
+}
+
 .status-tag {
   display: inline-block;
   margin-top: 12px;

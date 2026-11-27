@@ -173,15 +173,43 @@ def chat(request):
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
     except APIError as error:
-        if error.code in (429, 503):
+        if error.code == 429:
+            logger.warning('Gemini rate limit or usage quota reached.')
+            return Response(
+                {
+                    'detail': (
+                        'Gemini has reached its request or usage limit. '
+                        'Wait before retrying, or check your Google AI Studio quota.'
+                    )
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+        if error.code == 503:
             logger.warning('Gemini is temporarily unavailable (status %s).', error.code)
             return Response(
                 {'detail': 'Gemini is temporarily unavailable. Please try again shortly.'},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
+        if error.code in (400, 401, 403, 404):
+            logger.warning('Gemini rejected the request (status %s).', error.code)
+            return Response(
+                {
+                    'detail': (
+                        'Gemini rejected the request. Check that the API key is '
+                        'valid and the configured model is available to this key.'
+                    )
+                },
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
         logger.exception('Gemini returned an API error (status %s).', error.code)
         return Response(
             {'detail': 'The AI service could not complete this request. Please try again.'},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+    except ValueError as error:
+        logger.warning('Gemini returned no usable text: %s', error)
+        return Response(
+            {'detail': 'Gemini returned no text for this request. Please rephrase and try again.'},
             status=status.HTTP_502_BAD_GATEWAY,
         )
     except Exception:
@@ -197,12 +225,15 @@ def chat(request):
         Message.objects.create(
             conversation=conversation,
             role='user',
-            text=user_text[:MAX_MESSAGE_LENGTH],
+            text=user_text,
+            language=language,
         )
         Message.objects.create(
             conversation=conversation,
             role='model',
-            text=answer[:MAX_MESSAGE_LENGTH],
+            text=answer,
+            language=language,
+            sources=hospital_sources,
         )
         conversation.save(update_fields=['updated_at'])
 
@@ -212,4 +243,41 @@ def chat(request):
         'conversation_id': str(conversation.id),
         'sources': hospital_sources,
         'language': language,
+    })
+
+
+@api_view(['GET'])
+def conversation_history(request, conversation_id):
+    owner_token = request.session.get('ai_assistant_owner')
+    if not owner_token:
+        return Response(
+            {'detail': 'Conversation not found.'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    conversation = (
+        Conversation.objects
+        .prefetch_related('messages')
+        .filter(id=conversation_id, owner_token=owner_token)
+        .first()
+    )
+    if conversation is None:
+        return Response(
+            {'detail': 'Conversation not found.'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    return Response({
+        'conversation_id': str(conversation.id),
+        'messages': [
+            {
+                'id': message.pk,
+                'role': 'assistant' if message.role == 'model' else 'user',
+                'text': message.text,
+                'language': message.language,
+                'sources': message.sources,
+                'created_at': message.created_at,
+            }
+            for message in conversation.messages.all()
+        ],
     })

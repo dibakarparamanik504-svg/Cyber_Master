@@ -329,29 +329,6 @@ function Appointment() {
 
   return (
     <div className="appointment-page">
-      {/* NAVIGATION */}
-      <header className="appointment-navbar">
-        <a href="/" className="appointment-brand">
-          <span className="appointment-brand-icon">✚</span>
-          <span>
-            <strong>PULSELINE <em>AI</em></strong>
-            <small>SMART HOSPITAL</small>
-          </span>
-        </a>
-
-        <nav className="appointment-nav">
-          <a href="/">Home</a>
-          <a href="/appointment" className="current">Appointment</a>
-          <a href="/ai-assistant">AI Assistant</a>
-          <a href="/live-queue">Live Queue</a>
-          <a href="/departments">Departments</a>
-        </nav>
-
-        <a href="#booking" className="appointment-nav-button">
-          Book Now ↗
-        </a>
-      </header>
-
       <main>
         {/* 01 HERO */}
         <section className="appointment-hero" id="appointment-home">

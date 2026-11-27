@@ -376,27 +376,6 @@ function Departments() {
 
   return (
     <div className="departments-page">
-      {/* NAVIGATION */}
-      <nav className="dept-navbar">
-        <a href="/" className="dept-brand">
-          <span className="dept-brand-icon">✚</span>
-          <span>PULSELINE <strong>AI</strong></span>
-        </a>
-
-        <div className="dept-nav-links">
-          <a href="/">Home</a>
-          <a href="/appointment">Appointment</a>
-          <a href="/ai-assistant">AI Assistant</a>
-          <a href="/live-queue">Live Queue</a>
-          <a href="/departments" className="active">Departments</a>
-        </div>
-
-        <span className="dept-nav-status">
-          <span className="dept-status-dot" />
-          Department Directory
-        </span>
-      </nav>
-
       {/* 01 HERO */}
       <header className="dept-hero">
         <div className="dept-hero-content">

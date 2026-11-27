@@ -22,7 +22,9 @@ class Message(models.Model):
         on_delete=models.CASCADE,
     )
     role = models.CharField(max_length=8, choices=ROLES)
-    text = models.TextField(max_length=4000)
+    text = models.TextField()
+    language = models.CharField(max_length=8, default='en-IN')
+    sources = models.JSONField(default=list, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

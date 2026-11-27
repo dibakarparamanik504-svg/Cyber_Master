@@ -128,7 +128,18 @@ def serialize_facility(facility):
 def ai_error_response(error):
     if isinstance(error, GeminiNotConfiguredError):
         return Response({'detail': str(error)}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-    if isinstance(error, APIError) and error.code in (429, 503):
+    if isinstance(error, APIError) and error.code == 429:
+        logger.warning('Gemini rate limit or usage quota reached.')
+        return Response(
+            {
+                'detail': (
+                    'Gemini has reached its request or usage limit. '
+                    'Wait before retrying, or check your Google AI Studio quota.'
+                )
+            },
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+    if isinstance(error, APIError) and error.code == 503:
         logger.warning('Gemini is temporarily unavailable (status %s).', error.code)
         return Response(
             {'detail': 'Gemini is temporarily unavailable. Please try again shortly.'},

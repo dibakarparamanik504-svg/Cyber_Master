@@ -1,17 +1,10 @@
 
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import supportedLanguages from "../languages";
 import "./home.css";
 
 const API_BASE_URL = (process.env.REACT_APP_API_URL || "/api").replace(/\/$/, "");
-
-const NAVIGATION = [
-  { name: "Home", href: "#home", icon: "⌂" },
-  { name: "Appointment", href: "/appointment", icon: "▣" },
-  { name: "AI Assistant", href: "/ai-assistant", icon: "✧" },
-  { name: "Live Queue", href: "/live-queue", icon: "◷" },
-  { name: "Departments", href: "/departments", icon: "✚" }
-];
 
 const infrastructure = [
   ["🏢", "Hospital Digital Twin", "Virtual infrastructure representation.", "DEMO"],
@@ -132,13 +125,22 @@ function SectionHeading({ number, label, title, description }) {
   );
 }
 
-function FeatureCard({ icon, title, description, status }) {
+function FeatureCard({ icon, title, description, status, to }) {
   return (
     <article className="feature-card">
       <div className="feature-icon">{icon}</div>
       <h3>{title}</h3>
       <p>{description}</p>
       {status && <span className="status-tag">{status}</span>}
+      {to && (
+        <Link
+          className="feature-card-action"
+          to={to}
+          aria-label={`Explore ${title}`}
+        >
+          Explore feature <span aria-hidden="true">→</span>
+        </Link>
+      )}
     </article>
   );
 }
@@ -160,7 +162,6 @@ function InformationList({ items }) {
 }
 
 function Home() {
-  const [menuOpen, setMenuOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [profile, setProfile] = useState(initialProfile);
   const [notices, setNotices] = useState([]);
@@ -198,7 +199,6 @@ function Home() {
       behavior: "smooth",
       block: "start"
     });
-    setMenuOpen(false);
   };
 
   const handleSearch = (e) => {
@@ -317,43 +317,6 @@ function Home() {
   return (
     <div className="smartq-app">
 
-      {/* NAVIGATION BAR */}
-
-      <header className="navbar">
-        <a href="#home" className="brand">
-          <div className="brand-symbol">✚</div>
-          <div>
-            <h2>PULSELINE <span>AI</span></h2>
-            <small>SMART HOSPITAL</small>
-          </div>
-        </a>
-
-        <button
-          className="mobile-menu"
-          onClick={() => setMenuOpen(!menuOpen)}
-          aria-label="Toggle navigation"
-        >
-          {menuOpen ? "✕" : "☰"}
-        </button>
-
-        <nav className={menuOpen ? "nav-links active" : "nav-links"}>
-          {NAVIGATION.map((item) => (
-            <a
-              key={item.name}
-              href={item.href}
-              className={item.name === "Home" ? "active-link" : ""}
-              onClick={() => setMenuOpen(false)}
-            >
-              <span>{item.icon}</span> {item.name}
-            </a>
-          ))}
-        </nav>
-
-        <a href="#contact" className="nav-contact">
-          Contact Us ↗
-        </a>
-      </header>
-
       <main>
 
         {/* 01 HERO */}
@@ -440,16 +403,20 @@ function Home() {
           <div className="feature-grid four-columns">
             <FeatureCard icon="🧠" title="AI Intelligence Engine"
               description="Centralized hospital intelligence and information processing."
-              status="PLATFORM" />
+              status="PLATFORM"
+              to="/ai-intelligence-engine" />
             <FeatureCard icon="📈" title="Predictive Analytics"
               description="Analyze historical operational data to identify trends."
-              status="MODEL REQUIRED" />
+              status="MODEL REQUIRED"
+              to="/predictive-analytics" />
             <FeatureCard icon="📊" title="Operational Insights"
               description="Understand hospital operational performance indicators."
-              status="DATA REQUIRED" />
+              status="DATA REQUIRED"
+              to="/operational-insights" />
             <FeatureCard icon="🛡️" title="Hospital Risk Monitor"
               description="Identify infrastructure and operational risk indicators."
-              status="DATA REQUIRED" />
+              status="DATA REQUIRED"
+              to="/hospital-risk-monitor" />
           </div>
         </section>
 

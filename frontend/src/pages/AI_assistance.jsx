@@ -1,10 +1,12 @@
 
 import React, { useEffect, useRef, useState } from "react";
+import { fetchCsrfToken } from "../auth/api";
 import supportedLanguages from "../languages";
 import "./AI_assistance.css";
 
 const API_URL = (process.env.REACT_APP_API_URL || "/api").replace(/\/$/, "");
 const languages = supportedLanguages;
+const ACTIVE_CONVERSATION_KEY = "pulseline_ai_conversation_id";
 
 const initialMessages = [
   {
@@ -40,12 +42,43 @@ function createWelcomeMessages(language) {
   }];
 }
 
+async function readApiResponse(response, endpoint) {
+  const responseText = await response.text();
+  let data;
+  try {
+    data = responseText ? JSON.parse(responseText) : null;
+  } catch {
+    data = null;
+  }
+
+  if (!data || typeof data !== "object" || Array.isArray(data)) {
+    throw new Error(
+      `The AI endpoint ${endpoint} returned HTML or invalid JSON (HTTP ${response.status}). Start Django at http://127.0.0.1:8000 and use the React development URL printed by npm start so /api requests are proxied to Django.`
+    );
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      data.detail ||
+        Object.entries(data)
+          .map(([field, messages]) =>
+            `${field}: ${Array.isArray(messages) ? messages.join(" ") : messages}`
+          )
+          .join("; ") ||
+        `AI service returned an error (${response.status}).`
+    );
+  }
+
+  return data;
+}
+
 function AIAssistant() {
   const [language, setLanguage] = useState("en-IN");
   const [messages, setMessages] = useState(() => createWelcomeMessages("en-IN"));
   const [message, setMessage] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [listening, setListening] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [error, setError] = useState("");
@@ -57,6 +90,8 @@ function AIAssistant() {
   const recognitionRef = useRef(null);
   const fileInputRef = useRef(null);
   const messagesEndRef = useRef(null);
+  const languageRef = useRef(language);
+  const historyAbortRef = useRef(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -73,6 +108,102 @@ function AIAssistant() {
       return currentMessages;
     });
   }, [language]);
+
+  useEffect(() => {
+    languageRef.current = language;
+  }, [language]);
+
+  useEffect(() => {
+    let active = true;
+    let savedConversationId;
+    try {
+      savedConversationId = window.sessionStorage.getItem(
+        ACTIVE_CONVERSATION_KEY
+      );
+    } catch (storageError) {
+      setError(
+        `Browser storage is unavailable, so chat history cannot be restored: ${storageError.message}`
+      );
+      return () => {
+        active = false;
+      };
+    }
+
+    if (!savedConversationId) {
+      return () => {
+        active = false;
+      };
+    }
+
+    const endpoint = `${API_URL}/ai-assistant/conversations/${encodeURIComponent(
+      savedConversationId
+    )}/`;
+    const controller = new AbortController();
+    historyAbortRef.current = controller;
+    setHistoryLoading(true);
+    fetch(endpoint, {
+      credentials: "include",
+      signal: controller.signal,
+    })
+      .then((response) => readApiResponse(response, endpoint))
+      .then((data) => {
+        if (!active) return;
+        if (!Array.isArray(data.messages)) {
+          throw new Error("The AI service returned invalid conversation history.");
+        }
+
+        setConversationId(data.conversation_id);
+        const restoredLanguage = data.messages[data.messages.length - 1]?.language;
+        const activeLanguage = languages.some(
+          (item) => item.code === restoredLanguage
+        )
+          ? restoredLanguage
+          : languageRef.current;
+        if (activeLanguage !== languageRef.current) {
+          setLanguage(restoredLanguage);
+        }
+        setMessages([
+          ...createWelcomeMessages(activeLanguage),
+          ...data.messages.map((item) => {
+            const createdAt = new Date(item.created_at);
+            return {
+              id: item.id,
+              role: item.role,
+              text: item.text,
+              time: Number.isNaN(createdAt.getTime())
+                ? ""
+                : createdAt.toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  }),
+              source: item.role === "assistant" ? "PULSELINE" : "",
+              references: Array.isArray(item.sources) ? item.sources : [],
+            };
+          }),
+        ]);
+      })
+      .catch((historyError) => {
+        if (!active || historyError.name === "AbortError") return;
+        try {
+          window.sessionStorage.removeItem(ACTIVE_CONVERSATION_KEY);
+        } catch (storageError) {
+          setError(
+            `Could not clear unavailable chat history: ${storageError.message}`
+          );
+          return;
+        }
+        setConversationId(null);
+        setError(`Could not restore chat history: ${historyError.message}`);
+      })
+      .finally(() => {
+        if (active) setHistoryLoading(false);
+      });
+
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -127,37 +258,20 @@ function AIAssistant() {
         formData.append("file", selectedFile);
       }
 
+      const csrfToken = await fetchCsrfToken();
       const response = await fetch(`${API_URL}/ai-assistant/chat/`, {
         method: "POST",
         credentials: "include",
+        headers: {
+          "X-CSRFToken": csrfToken,
+        },
         body: formData,
       });
 
-      const responseText = await response.text();
-      let data;
-      try {
-        data = responseText ? JSON.parse(responseText) : null;
-      } catch {
-        data = null;
-      }
-
-      if (!data || typeof data !== "object" || Array.isArray(data)) {
-        throw new Error(
-          `The AI endpoint ${API_URL}/ai-assistant/chat/ returned HTML or invalid JSON (HTTP ${response.status}). Start Django at http://127.0.0.1:8000 and use the React development URL printed by npm start so /api requests are proxied to Django.`
-        );
-      }
-
-      if (!response.ok) {
-        throw new Error(
-          data.detail ||
-            Object.entries(data)
-              .map(([field, messages]) =>
-                `${field}: ${Array.isArray(messages) ? messages.join(" ") : messages}`
-              )
-              .join("; ") ||
-            `AI service returned an error (${response.status}).`
-        );
-      }
+      const data = await readApiResponse(
+        response,
+        `${API_URL}/ai-assistant/chat/`
+      );
 
       const answer =
         data.answer || data.reply || data.response || data.message;
@@ -168,6 +282,16 @@ function AIAssistant() {
 
       if (data.conversation_id) {
         setConversationId(data.conversation_id);
+        try {
+          window.sessionStorage.setItem(
+            ACTIVE_CONVERSATION_KEY,
+            data.conversation_id
+          );
+        } catch (storageError) {
+          setError(
+            `The answer was received, but browser storage prevented history restore: ${storageError.message}`
+          );
+        }
       }
 
       addMessage("assistant", answer, {
@@ -186,6 +310,7 @@ function AIAssistant() {
     } catch (err) {
       const errorMessage =
         err.message || "Unable to connect to PULSELINE. Please try again.";
+      setMessage(text);
       setError(errorMessage);
       addMessage("system", errorMessage);
     } finally {
@@ -300,6 +425,8 @@ function AIAssistant() {
   };
 
   const clearConversation = () => {
+    historyAbortRef.current?.abort();
+    setHistoryLoading(false);
     window.speechSynthesis?.cancel();
     setMessages(createWelcomeMessages(language));
     setConversationId(null);
@@ -309,6 +436,13 @@ function AIAssistant() {
 
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
+    }
+    try {
+      window.sessionStorage.removeItem(ACTIVE_CONVERSATION_KEY);
+    } catch (storageError) {
+      setError(
+        `The chat was cleared on this page, but saved history could not be cleared: ${storageError.message}`
+      );
     }
   };
 
@@ -321,31 +455,6 @@ function AIAssistant() {
 
   return (
     <div className="smartq-ai-page">
-      <header className="ai-navbar">
-        <a href="/" className="ai-brand">
-          <span className="ai-brand-icon">✚</span>
-          <span>
-            <strong>PULSELINE <b>AI</b></strong>
-            <small>INTELLIGENT HEALTHCARE</small>
-          </span>
-        </a>
-
-        <nav className="ai-nav-links">
-          <a href="/">HOME</a>
-          <a href="/appointment">APPOINTMENT</a>
-          <a href="/ai-assistant" className="ai-nav-active">
-            AI ASSISTANT
-          </a>
-          <a href="/live-queue">LIVE QUEUE</a>
-          <a href="/departments">DEPARTMENTS</a>
-        </nav>
-
-        <div className="ai-navbar-status">
-          <span className="ai-status-dot"></span>
-          AI ASSISTANT
-        </div>
-      </header>
-
       <main>
         {/* 01 - HERO */}
         <section className="ai-hero">
@@ -424,13 +533,19 @@ function AIAssistant() {
                 <button
                   type="button"
                   className="ai-clear-button"
+                  disabled={loading}
                   onClick={clearConversation}
                 >
                   ↻ New Chat
                 </button>
               </div>
 
-              <div className="ai-message-area">
+              <div className="ai-message-area" aria-busy={historyLoading}>
+                {historyLoading && (
+                  <p className="ai-language-note" role="status">
+                    Restoring conversation history...
+                  </p>
+                )}
                 {showHistory ? (
                   messages.map((item) => (
                     <div
@@ -442,7 +557,9 @@ function AIAssistant() {
                       )}
 
                       <div className="ai-message-content">
-                        <div className="ai-message-bubble">{item.text}</div>
+                        <div className="ai-message-bubble" dir="auto">
+                          {item.text}
+                        </div>
 
                         {item.fileName && (
                           <small className="ai-file-caption">
@@ -549,6 +666,7 @@ function AIAssistant() {
                 <textarea
                   value={message}
                   onChange={(event) => setMessage(event.target.value)}
+                  dir="auto"
                   placeholder="Ask PULSELINE a question..."
                   rows="1"
                   onKeyDown={(event) => {
@@ -574,7 +692,12 @@ function AIAssistant() {
                 <button
                   type="submit"
                   className="ai-send-button"
-                  disabled={loading || (!message.trim() && !selectedFile)}
+                  aria-label="Send message"
+                  disabled={
+                    loading ||
+                    historyLoading ||
+                    (!message.trim() && !selectedFile)
+                  }
                 >
                   ➤
                 </button>
@@ -619,8 +742,9 @@ function AIAssistant() {
                 <span className="ai-info-icon">♧</span>
                 <h3>Privacy Reminder</h3>
                 <p>
-                  Avoid sharing passwords, payment details or
-                  unnecessary sensitive personal information.
+                  Messages and uploads are sent to Google Gemini. Free-tier
+                  content may be used to improve Google products. Do not share
+                  passwords, personal identifiers, or sensitive medical records.
                 </p>
               </div>
             </aside>

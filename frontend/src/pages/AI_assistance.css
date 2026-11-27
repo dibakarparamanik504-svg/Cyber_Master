@@ -24,6 +24,15 @@ html {
   font: inherit;
 }
 
+.smartq-ai-page a:focus-visible,
+.smartq-ai-page button:focus-visible,
+.smartq-ai-page textarea:focus-visible,
+.smartq-ai-page input:focus-visible,
+.smartq-ai-page select:focus-visible {
+  outline: 3px solid #89d8cf;
+  outline-offset: 3px;
+}
+
 .ai-navbar {
   min-height: 78px;
   padding: 14px 6%;
@@ -960,6 +969,11 @@ html {
   background: #0eaa9b;
 }
 
+.ai-toggle input:focus-visible + span {
+  outline: 3px solid #89d8cf;
+  outline-offset: 3px;
+}
+
 .ai-toggle input:checked + span::before {
   transform: translateX(20px);
 }
@@ -1244,5 +1258,19 @@ html {
 
   .ai-orbit-label-three {
     left: 15px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .smartq-ai-page *,
+  .smartq-ai-page *::before,
+  .smartq-ai-page *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
